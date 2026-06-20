@@ -1,0 +1,1 @@
+- KV-cache สำหรับ generate() ตอนนี้ทุก step ของ generation มัน forward ทั้ง sequence ใหม่หมด (O(n²)) — ใช้ได้ตอน demo สั้นๆ แต่พอ sequence ยาวจะอืดมาก เป็นจุดที่ค่อยมา optimize รอบหลังได้
