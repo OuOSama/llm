@@ -76,7 +76,7 @@ class LLM(nn.Module):
         # --- Part 3: The Output Layers ---
         self.ln_f = nn.LayerNorm(config.n_embd)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
-        self.lm_head.weight = nn.Parameter(self.wte.weight)
+        self.lm_head.weight = self.wte.weight
 
     def forward(self, idx, targets=None):
         B, T = idx.size()
