@@ -1,4 +1,5 @@
 # src/data.py
+
 import os
 import numpy as np
 import torch
@@ -17,7 +18,10 @@ def get_batch_fn(data_dir: str, block_size: int, batch_size: int, split: str = "
             [torch.from_numpy(data[i : i + block_size].astype(np.int64)) for i in ix]
         )
         y = torch.stack(
-            [torch.from_numpy(data[i + 1 : i + 1 + block_size].astype(np.int64)) for i in ix]
+            [
+                torch.from_numpy(data[i + 1 : i + 1 + block_size].astype(np.int64))
+                for i in ix
+            ]
         )
         return x, y
 

@@ -44,8 +44,8 @@ def train(
     amp_dtype = torch.bfloat16 if use_bf16 else torch.float16
     # GradScaler only matters for fp16 (limited dynamic range).
     # bf16 doesn't need it, so we disable the scaler in that case.
-    scaler = torch.amp.GradScaler('cuda', enabled=on_cuda and not use_bf16)
-    
+    scaler = torch.amp.GradScaler("cuda", enabled=on_cuda and not use_bf16)
+
     start_step = 0
     if resume_from and os.path.exists(resume_from):
         start_step, _ = load_checkpoint(resume_from, model, optimizer, scaler)
@@ -77,12 +77,20 @@ def train(
         if step > 0 and step % save_every == 0:
             save_checkpoint(
                 os.path.join(checkpoint_dir, "latest.pt"),
-                model, optimizer, step, model.config, scaler,
+                model,
+                optimizer,
+                step,
+                model.config,
+                scaler,
             )
 
     save_checkpoint(
         os.path.join(checkpoint_dir, "final.pt"),
-        model, optimizer, max_steps, model.config, scaler,
+        model,
+        optimizer,
+        max_steps,
+        model.config,
+        scaler,
     )
     return model
 
