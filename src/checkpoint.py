@@ -5,7 +5,9 @@ import dataclasses
 import torch
 
 
-def save_checkpoint(path, model, optimizer, step, config, scaler=None):
+def save_checkpoint(
+    path, model, optimizer, step, config, scaler=None, best_val_loss=None
+):
     ckpt = {
         "model": model.state_dict(),
         "optimizer": optimizer.state_dict(),
@@ -14,6 +16,9 @@ def save_checkpoint(path, model, optimizer, step, config, scaler=None):
     }
     if scaler is not None and scaler.is_enabled():
         ckpt["scaler"] = scaler.state_dict()
+    if best_val_loss is not None:
+        # ต้องเก็บไว้ — ไม่งั้น resume แล้ว best.pt โดนทับด้วยโมเดลที่แย่กว่าของเดิม
+        ckpt["best_val_loss"] = best_val_loss
 
     os.makedirs(os.path.dirname(path), exist_ok=True)
     torch.save(ckpt, path)
@@ -36,4 +41,7 @@ def load_checkpoint(path, model, optimizer=None, scaler=None, map_location=None)
         optimizer.load_state_dict(ckpt["optimizer"])
     if scaler is not None and "scaler" in ckpt:
         scaler.load_state_dict(ckpt["scaler"])
-    return ckpt["step"], ckpt["config"]
+
+    # .get() กัน checkpoint รุ่นเก่าที่เซฟไว้ก่อนมี field นี้ — ไม่งั้นพังตอนโหลดของเก่า
+    best_val_loss = ckpt.get("best_val_loss", float("inf"))
+    return ckpt["step"], ckpt["config"], best_val_loss
