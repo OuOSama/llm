@@ -36,7 +36,7 @@ def generate_text(
 
 
 if __name__ == "__main__":
-    model = load_model_for_inference("checkpoints/final.pt")
+    model = load_model_for_inference("checkpoints/best.pt")
     text = generate_text(
         model,
         prompt="OuOSama: Hello! Who are you?\nKING RICHARD II: I am the King, and your name is",
