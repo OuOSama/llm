@@ -8,7 +8,7 @@ enc = tiktoken.get_encoding("gpt2")
 VOCAB_SIZE = enc.n_vocab  # 50257 — ต้องใช้ค่านี้ใน LLMConfig ด้วย
 
 
-def prepare(input_txt_path: str, out_dir: str, val_fraction: float = 0.001):
+def prepare(input_txt_path: str, out_dir: str, val_fraction: float = 0.05):
     with open(input_txt_path, "r", encoding="utf-8") as f:
         text = f.read()
 
