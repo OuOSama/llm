@@ -3,7 +3,9 @@
 import torch
 import tiktoken
 
-from model import LLM, LLMConfig, device
+from model import LLM, LLMConfig
+
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 enc = tiktoken.get_encoding("gpt2")
 
@@ -39,6 +41,6 @@ if __name__ == "__main__":
     model = load_model_for_inference("checkpoints/best.pt")
     text = generate_text(
         model,
-        prompt="OuOSama: Hello! Who are you?\nKING RICHARD II: I am the King, and your name is",
+        prompt="My lord, I'll tell my mother,I will not be done.",
     )
     print(text)
