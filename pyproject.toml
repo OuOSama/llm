@@ -3,10 +3,12 @@ name = "llm"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
+    "datasets>=5.0.0",
     "tensorboard>=2.20.0",
     "tiktoken>=0.13.0",
     "torch>=2.12.0",
     "torchvision>=0.27.0",
+    "transformers>=5.12.1",
 ]
 
 [tool.uv.sources]
