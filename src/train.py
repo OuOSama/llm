@@ -5,8 +5,10 @@ import os
 import torch
 from torch.utils.tensorboard import SummaryWriter
 
-from model import LLM, LLMConfig, device
+from model import LLM, LLMConfig
 from checkpoint import save_checkpoint, load_checkpoint
+
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 def get_lr(
@@ -61,7 +63,7 @@ def train(
     save_every: int = 500,
     resume_from: str | None = None,
     auto_resume: bool = True,
-    log_dir: str = "runs",  # NEW — TensorBoard event files go here
+    log_dir: str = "runs",
 ):
     model.to(device)
     optimizer = torch.optim.AdamW(
@@ -72,6 +74,9 @@ def train(
     use_bf16 = on_cuda and torch.cuda.is_bf16_supported()
     amp_dtype = torch.bfloat16 if use_bf16 else torch.float16
     scaler = torch.amp.GradScaler("cuda", enabled=on_cuda and not use_bf16)
+
+    # จัดระเบียบการสร้างโฟลเดอร์สำหรับเซฟงาน
+    os.makedirs(checkpoint_dir, exist_ok=True)
 
     if resume_from is None and auto_resume:
         candidate = os.path.join(checkpoint_dir, "latest.pt")
@@ -96,36 +101,46 @@ def train(
         )
         return model
 
-    # NEW — เปิด writer แค่ตอนที่จะเทรนจริง (ไม่งั้นมันจะไปสร้าง log_dir เปล่า ๆ ทิ้งไว้)
     writer = SummaryWriter(log_dir=log_dir)
-
     model.train()
+
+    # ล้างค่ากราเดียนต์สะสมเริ่มต้นเคลียร์ VRAM รอไว้ก่อนลุย
+    optimizer.zero_grad(set_to_none=True)
+
     for step in range(start_step, max_steps):
+        # 1. ปรับความเร็วรอบ (Learning Rate) ตามสูตร Cosine Decay
         lr = get_lr(step, warmup_steps, max_steps, max_lr, min_lr)
         for group in optimizer.param_groups:
             group["lr"] = lr
 
+        # 2. ดึงข้อมูลและโยนเข้าอุปกรณ์ประมวลผล
         x, y = get_batch()
         x, y = x.to(device), y.to(device)
 
-        optimizer.zero_grad(set_to_none=True)
-
+        # 3. ประมวลผลแบบ Mixed Precision ครอบคลุมออโต้
         with torch.autocast(device_type=device.type, dtype=amp_dtype, enabled=on_cuda):
             _, loss = model(x, y)
 
+        # 4. คำนวณ Backward ลากย้อนกลับและตัดขอบแอมพลิจูดกันระเบิด
         scaler.scale(loss).backward()
         scaler.unscale_(optimizer)
         torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+
+        # 5. อัปเดตน้ำหนักเวทโครงข่ายและขยับสเต็ป
         scaler.step(optimizer)
         scaler.update()
 
-        # NEW — log ทุก step ขึ้น TensorBoard (ถูกมาก แค่เขียน scalar เล็ก ๆ)
+        # ⚡ ขยับมาทำตรงนี้ทันทีหลังจากอัปเดตเสร็จ เพื่อเซฟเมโมรี่ระดับ Performance-first!
+        optimizer.zero_grad(set_to_none=True)
+
+        # บันทึกข้อมูลสถิติต่างๆ ขึ้น TensorBoard
         writer.add_scalar("lr", lr, step)
         writer.add_scalar("loss/train_step", loss.item(), step)
 
         if step % log_every == 0:
             print(f"step {step:6d} | lr {lr:.2e} | train loss {loss.item():.4f}")
 
+        # ตรวจสอบและประเมินผล Validation ชุดทดสอบตามรอบเวลา
         if get_val_batch is not None and step > 0 and step % eval_interval == 0:
             losses = estimate_loss(
                 model,
@@ -139,40 +154,44 @@ def train(
             print(
                 f"step {step:6d} | eval: train {losses['train']:.4f} | val {losses['val']:.4f}"
             )
+
             if losses["val"] < best_val_loss:
                 best_val_loss = losses["val"]
+                # 🛠️ เอา model.config ส่วนเกินออกเพื่อให้ตรงกับสเปกคนรับโหลดไฟล์
                 save_checkpoint(
-                    os.path.join(checkpoint_dir, "best.pt"),
-                    model,
-                    optimizer,
-                    step,
-                    model.config,
-                    scaler,
+                    path=os.path.join(checkpoint_dir, "best.pt"),
+                    model=model,
+                    optimizer=optimizer,
+                    step=step,
+                    config=model.config,  # ยิง config ตัวจริงเข้าไปตรงนี้!
+                    scaler=scaler,
                     best_val_loss=best_val_loss,
                 )
                 print("  -> new best val loss, saved best.pt")
 
         if step > 0 and step % save_every == 0:
+            # 🛠️ เอา model.config ออกเช่นเดียวกันค่ะซามะ
             save_checkpoint(
-                os.path.join(checkpoint_dir, "latest.pt"),
-                model,
-                optimizer,
-                step,
-                model.config,
-                scaler,
+                path=os.path.join(checkpoint_dir, "latest.pt"),
+                model=model,
+                optimizer=optimizer,
+                step=step,
+                config=model.config,  # ยิง config ตัวจริงเข้าไปตรงนี้!
+                scaler=scaler,
                 best_val_loss=best_val_loss,
             )
 
+    # จบลูปกระบวนการบันทึกผลงานไฟนอลขั้นสุดท้าย
     save_checkpoint(
-        os.path.join(checkpoint_dir, "final.pt"),
-        model,
-        optimizer,
-        max_steps,
-        model.config,
-        scaler,
+        path=os.path.join(checkpoint_dir, "final.pt"),
+        model=model,
+        optimizer=optimizer,
+        step=step,
+        config=model.config,  # ยิง config ตัวจริงเข้าไปตรงนี้!
+        scaler=scaler,
         best_val_loss=best_val_loss,
     )
-    writer.close()  # NEW — flush ทุกอย่างลง disk ก่อนจบ
+    writer.close()
     return model
 
 
@@ -188,6 +207,7 @@ if __name__ == "__main__":
     trained_model = train(
         model,
         dummy_get_batch,
+        get_val_batch=dummy_get_batch,  # ใส่ตัวแปรจำลองฝั่งทดสอบเพิ่มเข้าไปด้วยให้ครบสิทธิ์
         max_steps=500,
         warmup_steps=20,
         auto_resume=False,
