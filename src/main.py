@@ -1,43 +1,30 @@
-# src/main.py
+import torch
+from transformers import PreTrainedTokenizerFast
+from src.model.huggingface_warpper import HFLLMWrapper
 
-from model import LLM, LLMConfig
-from data import get_batch_fn
-from train import train
+# 1. โหลด Tokenizer ตัวเดิมที่ใช้ตอนเทรน
+tokenizer = PreTrainedTokenizerFast(tokenizer_file="data/tokenizer.json")
+tokenizer.pad_token = "[PAD]"
 
-VOCAB_SIZE = 50257
+# 2. โหลดโมเดลที่เทรนเสร็จแล้ว (มันจะโหลดไฟล์จากโฟลเดอร์ results ให้เอง)
+model = HFLLMWrapper.from_pretrained("./results/checkpoint-4250")
+model.eval()  # สั่งให้เป็นโหมดพร้อมตอบคำถาม
 
+# 3. ลองป้อนคำถามให้โมเดล
+prompt = "god"
+inputs = tokenizer(prompt, return_tensors="pt")
 
-def main():
-    block_size = 256
-    batch_size = 32
-
-    config = LLMConfig(
-        vocab_size=VOCAB_SIZE,
-        block_size=block_size,
-        n_layer=6,
-        n_head=6,
-        n_embd=384,
-    )
-    model = LLM(config)
-
-    get_batch = get_batch_fn(
-        data_dir="data", block_size=block_size, batch_size=batch_size, split="train"
-    )
-    get_val_batch = get_batch_fn(
-        data_dir="data", block_size=block_size, batch_size=batch_size, split="val"
-    )
-
-    train(
-        model,
-        get_batch,
-        get_val_batch=get_val_batch,
-        max_steps=5000,
-        warmup_steps=100,
-        eval_interval=200,
-        eval_iters=50,
-        log_dir="runs/baseline",  # NEW — เปลี่ยนชื่อทุกครั้งที่ลอง config ใหม่ จะได้เทียบ curve กันใน dashboard ได้
+# 4. ให้โมเดล Generate คำตอบออกมา
+with torch.no_grad():
+    outputs = model.generate(
+        **inputs,
+        max_new_tokens=50,
+        do_sample=True,
+        temperature=1.2,  # ให้โอกาสคำอื่นๆ บ้าง
+        top_p=0.9,  # เลือกจากกลุ่มคำที่มีความน่าจะเป็นสูง
+        repetition_penalty=2.0,  # สั่งห้ามซ้ำแบบเด็ดขาด!
+        no_repeat_ngram_size=2,  # ห้ามพูด 2 คำซ้ำเดิมติดกันเด็ดขาด
     )
 
-
-if __name__ == "__main__":
-    main()
+# 5. แปลงรหัสตัวเลขกลับมาเป็นข้อความที่อ่านรู้เรื่อง
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
